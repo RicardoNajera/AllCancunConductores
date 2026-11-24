@@ -9,7 +9,7 @@ Aquí solo cambia la cara: RLS decide qué filas ve cada conductor.
 ## Cómo se registra un conductor
 
 1. Abre la app → **No tengo cuenta · Registrarme**.
-2. Correo + contraseña, o **Registrarme con Google**.
+2. Correo y contraseña.
 3. Confirma el correo si el proyecto lo exige (Authentication → Email).
 4. La central le otorga el permiso `conducir` en `public.permisos`.
 5. Al abrir la app ya ve sus viajes.
@@ -38,7 +38,6 @@ node dev-server.mjs   # http://127.0.0.1:8767
 
 ## Configuración en Supabase
 
-- **Authentication → Providers**: activa *Email* y, si quieres, *Google*.
+- **Authentication → Providers**: activa *Email*.
 - **Authentication → URL Configuration → Redirect URLs**: agrega el origen
-  donde publiques (`https://tudominio/` y `http://127.0.0.1:8767/`).
-  Sin esto, el botón de Google falla al volver.
+  donde publiques, para que el enlace de confirmación vuelva a la app.

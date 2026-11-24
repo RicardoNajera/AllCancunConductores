@@ -2,8 +2,8 @@
  * Acceso a Supabase con el SDK oficial (el mismo que usan la PWA del cliente
  * y el panel de comercios).
  *
- * Aquí sí hay cuentas reales: el conductor se registra con correo+contraseña
- * o con Google, y su perfil vive en public.perfiles. El permiso de conducir
+ * Aquí sí hay cuentas reales: el conductor se registra con correo y
+ * contraseña, y su perfil vive en public.perfiles. El permiso de conducir
  * se otorga con la tabla de permisos (`tipo_permiso = 'conducir'`), no
  * escribiendo el rol: la app nunca asigna roles.
  */
@@ -99,20 +99,6 @@ export async function entrarConCorreo(correo, contrasena) {
   });
   if (error) throw error;
   return data.session;
-}
-
-export async function entrarConGoogle() {
-  const sb = await getSupabase();
-  const { error } = await sb.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      /* Vuelve a esta misma página. Debe estar en
-         Authentication → URL Configuration → Redirect URLs. */
-      redirectTo: window.location.origin + window.location.pathname,
-      queryParams: { prompt: "select_account" },
-    },
-  });
-  if (error) throw error;
 }
 
 export async function salir() {

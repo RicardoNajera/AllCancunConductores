@@ -1,8 +1,8 @@
 /**
  * All Cancún Conductores
  *
- * Panel del conductor. Cuenta real con Supabase Auth (correo+contraseña o
- * Google), perfil en public.perfiles y permiso de conducir en public.permisos.
+ * Panel del conductor. Cuenta real con Supabase Auth (correo y contraseña),
+ * perfil en public.perfiles y permiso de conducir en public.permisos.
  * Los viajes son los que tiene asignados su perfil.
  *
  * Sin framework ni build: HTML + módulos nativos, como las otras dos PWA.
@@ -314,8 +314,6 @@ function mensajePorError(err, porDefecto = "") {
   if (m.includes("email not confirmed"))
     return "Falta confirmar tu correo. Revisa tu bandeja de entrada.";
   if (m.includes("unable to validate email")) return "Escribe un correo válido.";
-  if (m.includes("provider is not enabled"))
-    return "Google todavía no está activo en Supabase (Authentication → Providers).";
   if (m.includes("failed to fetch") || m.includes("network"))
     return "Sin conexión. Revisa tu internet.";
   return porDefecto || err?.message || "Algo salió mal. Intenta de nuevo.";
@@ -487,7 +485,7 @@ async function iniciar() {
   try {
     await getSupabase();
 
-    /* Google vuelve a esta página con la sesión ya puesta (PKCE). */
+    /* Al volver de confirmar el correo, la sesión ya viene puesta (PKCE). */
     alCambiarSesion(() => {
       if (memoria.sesion === null) arrancarSesion().catch(() => {});
     });
