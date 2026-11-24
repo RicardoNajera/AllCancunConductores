@@ -244,3 +244,72 @@ input:focus { outline: 2px solid var(--accent-2); outline-offset: 1px; }
 @media (prefers-reduced-motion: reduce) {
   .cargando::after { animation: none; }
 }
+
+/* ================= SOLO TELÉFONO =================
+   El conductor usa esto en la mano, en la calle. Nada de diseños de
+   escritorio: una columna, dedos con guantes, sol directo. */
+
+.vista { font-size: 16px; }
+.sutil { font-size: 15px; line-height: 1.6; }
+label { font-size: 14px; font-weight: 600; }
+
+/* Campos grandes: el pulgar acierta a la primera */
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+input[type="text"] {
+  min-height: 56px;
+  font-size: 17px;
+  border-radius: 16px;
+  padding: 0 18px;
+}
+
+.btn {
+  min-height: 56px;
+  font-size: 17px;
+  border-radius: 16px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+.btn--ghost { min-height: 48px; font-size: 15px; font-weight: 600; }
+
+/* Tarjeta de viaje: lo más grande de la pantalla */
+.viaje__folio { font-size: 13px; letter-spacing: 1px; }
+.viaje__estado { font-size: 12px; padding: 6px 12px; }
+.ruta { gap: 16px; margin: 18px 0; }
+.ruta__texto { font-size: 17px; line-height: 1.35; font-weight: 600; }
+.ruta__etiqueta { font-size: 11px; margin-bottom: 3px; letter-spacing: 0.8px; }
+.ruta__punto { width: 12px; height: 12px; margin-top: 6px; }
+.viaje__meta { font-size: 15px; padding-top: 14px; gap: 6px; }
+.viaje__precio { font-size: 20px; }
+.acciones { gap: 12px; margin-top: 16px; }
+
+.fila { font-size: 16px; padding: 14px 0; }
+
+@media (max-width: 820px) {
+  html { font-size: 17px; }
+  .vista {
+    max-width: 100%;
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  h1 { font-size: 26px; margin-bottom: 18px; }
+  .card { padding: 18px; border-radius: 18px; margin-bottom: 14px; }
+
+  /* Dock más alto: zona cómoda del pulgar */
+  :root { --dock-h: 68px; }
+  .dock__item { font-size: 12px; }
+  .dock__icon { font-size: 22px; }
+}
+
+/* Que el teclado no tape el botón */
+@supports (height: 100dvh) {
+  body { min-height: 100dvh; }
+}
+
+/* Pantallas muy chicas (SE, gama baja): botones a lo ancho */
+@media (max-width: 360px) {
+  h1 { font-size: 23px; }
+  .card { padding: 15px; }
+  .acciones { grid-template-columns: 1fr; }
+}

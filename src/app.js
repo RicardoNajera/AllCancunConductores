@@ -13,7 +13,6 @@ import {
   sesionActual,
   registrarConCorreo,
   entrarConCorreo,
-  entrarConGoogle,
   salir,
   alCambiarSesion,
   leerPerfil,
@@ -86,9 +85,6 @@ function vistaEntrada(modo = "entrar", aviso = "") {
         ${esRegistro ? "Crear mi cuenta" : "Entrar"}
       </button>
 
-      <button class="btn btn--ghost" id="btn-google" type="button">
-        ${esRegistro ? "Registrarme con Google" : "Entrar con Google"}
-      </button>
     </div>
 
     <button class="btn btn--ghost" id="btn-cambiar-modo" type="button" data-modo="${esRegistro ? "entrar" : "registrar"}">
@@ -293,7 +289,6 @@ function pintar() {
 
 function conectarEventosCuenta() {
   $("#btn-principal")?.addEventListener("click", enviarCuenta);
-  $("#btn-google")?.addEventListener("click", () => intentar(entrarConGoogle, "No se pudo abrir Google."));
   $("#btn-cambiar-modo")?.addEventListener("click", (e) => {
     modoEntrada = e.currentTarget.dataset.modo || "entrar";
     avisoEntrada = "";
@@ -307,15 +302,6 @@ function conectarEventosCuenta() {
 }
 
 /* ---------------- Acciones de cuenta ---------------- */
-
-function intentar(fn, mensaje) {
-  Promise.resolve()
-    .then(fn)
-    .catch((err) => {
-      avisoEntrada = mensajePorError(err, mensaje);
-      pintar();
-    });
-}
 
 /** Traduce los errores más comunes de Supabase Auth a algo entendible. */
 function mensajePorError(err, porDefecto = "") {
