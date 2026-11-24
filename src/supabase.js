@@ -2,8 +2,8 @@
  * Acceso a Supabase con el SDK oficial (el mismo que usan la PWA del cliente
  * y el panel de comercios).
  *
- * Aquí sí hay cuentas reales: el conductor se registra con correo y
- * contraseña, y su perfil vive en public.perfiles. El permiso de conducir
+ * Aquí sí hay cuentas reales: el conductor entra con su cuenta de Google,
+ * y su perfil vive en public.perfiles. El permiso de conducir
  * se otorga con la tabla de permisos (`tipo_permiso = 'conducir'`), no
  * escribiendo el rol: la app nunca asigna roles.
  */
@@ -77,28 +77,18 @@ export async function sesionActual() {
   return data.session || null;
 }
 
-export async function registrarConCorreo(correo, contrasena) {
+export async function entrarConGoogle() {
   const sb = await getSupabase();
-  const { data, error } = await sb.auth.signUp({
-    email: correo.trim().toLowerCase(),
-    password: contrasena,
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      /* Vuelve a esta misma página con la sesión ya puesta (PKCE).
+         El origen debe estar en Authentication → URL Configuration. */
+      redirectTo: window.location.origin + window.location.pathname,
+      queryParams: { prompt: "select_account" },
+    },
   });
   if (error) throw error;
-
-  /* Si el proyecto exige confirmar el correo no hay sesión todavía:
-     se avisa para que el conductor revise su bandeja. */
-  if (!data.session) return { pendienteConfirmar: true, usuario: data.user };
-  return { pendienteConfirmar: false, usuario: data.user };
-}
-
-export async function entrarConCorreo(correo, contrasena) {
-  const sb = await getSupabase();
-  const { data, error } = await sb.auth.signInWithPassword({
-    email: correo.trim().toLowerCase(),
-    password: contrasena,
-  });
-  if (error) throw error;
-  return data.session;
 }
 
 export async function salir() {

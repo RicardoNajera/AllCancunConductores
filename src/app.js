@@ -1,7 +1,7 @@
 /**
  * All Cancún Conductores
  *
- * Panel del conductor. Cuenta real con Supabase Auth (correo y contraseña),
+ * Panel del conductor. Cuenta real con Google (Supabase Auth),
  * perfil en public.perfiles y permiso de conducir en public.permisos.
  * Los viajes son los que tiene asignados su perfil.
  *
@@ -11,8 +11,7 @@
 import {
   getSupabase,
   sesionActual,
-  registrarConCorreo,
-  entrarConCorreo,
+  entrarConGoogle,
   salir,
   alCambiarSesion,
   leerPerfil,
@@ -59,37 +58,39 @@ const primerNombre = (p) =>
 
 /* ---------------- Vistas de cuenta ---------------- */
 
-function vistaEntrada(modo = "entrar", aviso = "") {
-  const esRegistro = modo === "registrar";
+const ICONO_GOOGLE = `
+  <svg class="google__logo" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+  </svg>`;
 
+function vistaEntrada(aviso = "") {
   return `
-    <h1>${esRegistro ? "Crear cuenta" : "Entrar"}</h1>
-    <p class="sutil">${
-      esRegistro
-        ? "Regístrate para recibir viajes. Usa el mismo correo con el que te darán de alta en la central."
-        : "Entra con tu cuenta de All Cancún."
-    }</p>
+    <div class="acceso">
+      <div class="acceso__marca">
+        <img class="acceso__logo" src="icons/icon-192.png" alt="" width="88" height="88" />
+        <h1 class="acceso__titulo">All Cancún</h1>
+        <p class="acceso__lema">Conductores</p>
+      </div>
 
-    ${aviso ? `<div class="aviso">${escapar(aviso)}</div>` : ""}
+      <p class="acceso__texto">
+        Entra con tu cuenta de Google para ver los viajes que te asigna la central.
+      </p>
 
-    <div class="card">
-      <label for="correo">Correo</label>
-      <input id="correo" type="email" inputmode="email" autocomplete="email"
-             placeholder="tucorreo@ejemplo.com" value="">
+      ${aviso ? `<div class="aviso" role="alert">${escapar(aviso)}</div>` : ""}
 
-      <label for="contrasena">Contraseña</label>
-      <input id="contrasena" type="password" autocomplete="${esRegistro ? "new-password" : "current-password"}"
-             placeholder="Mínimo 6 caracteres">
-
-      <button class="btn" id="btn-principal" type="button">
-        ${esRegistro ? "Crear mi cuenta" : "Entrar"}
+      <button class="google" id="btn-google" type="button">
+        ${ICONO_GOOGLE}
+        <span>Continuar con Google</span>
       </button>
 
+      <p class="acceso__nota">
+        Solo entran conductores dados de alta en la central. Si tu cuenta
+        todavía no está autorizada, pide que activen tu permiso.
+      </p>
     </div>
-
-    <button class="btn btn--ghost" id="btn-cambiar-modo" type="button" data-modo="${esRegistro ? "entrar" : "registrar"}">
-      ${esRegistro ? "Ya tengo cuenta · Entrar" : "No tengo cuenta · Registrarme"}
-    </button>
   `;
 }
 
@@ -109,16 +110,6 @@ function vistaSinPermiso() {
   `;
 }
 
-function vistaEsperandoCorreo(correo) {
-  return `
-    <h1>Revisa tu correo</h1>
-    <div class="aviso">
-      Te mandamos un enlace a <strong>${escapar(correo)}</strong> para confirmar la cuenta.
-      Después de confirmarla, entra aquí otra vez.
-    </div>
-    <button class="btn" id="btn-cambiar-modo" type="button" data-modo="entrar">Ya confirmé · Entrar</button>
-  `;
-}
 
 function vistaViajes() {
   if (memoria.cargando) return `<h1>Mis viajes</h1><div class="cargando">Cargando</div>`;
@@ -243,9 +234,7 @@ function vistaPerfil() {
 
 /* ---------------- Pintado ---------------- */
 
-let modoEntrada = "entrar";
 let avisoEntrada = "";
-let correoPendiente = "";
 
 function pintar() {
   const vista = $("#vista");
@@ -255,7 +244,7 @@ function pintar() {
 
   const dentro = Boolean(memoria.sesion) && memoria.permiteConducir;
   dock.hidden = !dentro;
-  btnSalir.hidden = !memoria.sesion;
+  btnSalir.hidden = !dentro;
 
   if (pill) {
     pill.textContent = memoria.sesion ? "Conectado" : "Sin sesión";
@@ -263,9 +252,7 @@ function pintar() {
   }
 
   if (!memoria.sesion) {
-    vista.innerHTML = correoPendiente
-      ? vistaEsperandoCorreo(correoPendiente)
-      : vistaEntrada(modoEntrada, avisoEntrada);
+    vista.innerHTML = vistaEntrada(avisoEntrada);
     conectarEventosCuenta();
     return;
   }
@@ -288,17 +275,7 @@ function pintar() {
 }
 
 function conectarEventosCuenta() {
-  $("#btn-principal")?.addEventListener("click", enviarCuenta);
-  $("#btn-cambiar-modo")?.addEventListener("click", (e) => {
-    modoEntrada = e.currentTarget.dataset.modo || "entrar";
-    avisoEntrada = "";
-    correoPendiente = "";
-    pintar();
-  });
-
-  $("#contrasena")?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") enviarCuenta();
-  });
+  $("#btn-google")?.addEventListener("click", entrarConGoogleDesdeUi);
 }
 
 /* ---------------- Acciones de cuenta ---------------- */
@@ -306,56 +283,37 @@ function conectarEventosCuenta() {
 /** Traduce los errores más comunes de Supabase Auth a algo entendible. */
 function mensajePorError(err, porDefecto = "") {
   const m = String(err?.message || err || "").toLowerCase();
-  if (m.includes("invalid login")) return "Correo o contraseña incorrectos.";
-  if (m.includes("already registered") || m.includes("already been registered"))
-    return "Ese correo ya tiene cuenta. Entra con tu contraseña.";
-  if (m.includes("password should be at least"))
-    return "La contraseña necesita al menos 6 caracteres.";
-  if (m.includes("email not confirmed"))
-    return "Falta confirmar tu correo. Revisa tu bandeja de entrada.";
-  if (m.includes("unable to validate email")) return "Escribe un correo válido.";
+  if (m.includes("provider is not enabled"))
+    return "Google no está activo en Supabase (Authentication → Providers).";
+  if (m.includes("redirect") && m.includes("not allowed"))
+    return "Falta autorizar esta dirección en Supabase (URL Configuration).";
+  if (m.includes("popup") || m.includes("closed by user"))
+    return "Se cerró la ventana de Google. Intenta otra vez.";
   if (m.includes("failed to fetch") || m.includes("network"))
     return "Sin conexión. Revisa tu internet.";
   return porDefecto || err?.message || "Algo salió mal. Intenta de nuevo.";
 }
 
-async function enviarCuenta() {
-  const correo = $("#correo")?.value?.trim() || "";
-  const contrasena = $("#contrasena")?.value || "";
-  const boton = $("#btn-principal");
+async function entrarConGoogleDesdeUi() {
+  const boton = $("#btn-google");
+  if (boton?.disabled) return;
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
-    avisoEntrada = "Escribe un correo válido.";
-    pintar();
-    return;
+  avisoEntrada = "";
+  if (boton) {
+    boton.disabled = true;
+    boton.classList.add("google--cargando");
+    boton.querySelector("span").textContent = "Abriendo Google…";
   }
-  if (contrasena.length < 6) {
-    avisoEntrada = "La contraseña necesita al menos 6 caracteres.";
-    pintar();
-    return;
-  }
-
-  boton.disabled = true;
-  boton.textContent = modoEntrada === "registrar" ? "Creando cuenta…" : "Entrando…";
 
   try {
-    if (modoEntrada === "registrar") {
-      const res = await registrarConCorreo(correo, contrasena);
-      if (res.pendienteConfirmar) {
-        correoPendiente = correo;
-        pintar();
-        return;
-      }
-      await arrancarSesion();
-    } else {
-      await entrarConCorreo(correo, contrasena);
-      await arrancarSesion();
-    }
+    /* Redirige a Google: la página se va y vuelve con la sesión puesta. */
+    await entrarConGoogle();
   } catch (err) {
-    avisoEntrada = mensajePorError(err);
+    avisoEntrada = mensajePorError(err, "No se pudo abrir Google.");
     pintar();
   }
 }
+
 
 /* ---------------- Sesión y datos ---------------- */
 
@@ -416,9 +374,7 @@ async function cerrarSesion() {
   memoria.perfil = null;
   memoria.permiteConducir = false;
   memoria.viajes = [];
-  modoEntrada = "entrar";
   avisoEntrada = "";
-  correoPendiente = "";
   pintar();
 }
 

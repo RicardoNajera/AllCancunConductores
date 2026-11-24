@@ -325,6 +325,102 @@ input:-webkit-autofill:focus {
   transition: background-color 9999s ease-out 0s;
 }
 
+/* ================= PANTALLA DE ACCESO (solo Google) =================
+   Una sola acción clara. Nada de casillas: la cuenta la pone Google. */
+
+.acceso {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding-top: 8vh;
+}
+
+.acceso__marca {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 26px;
+}
+
+.acceso__logo {
+  width: 88px;
+  height: 88px;
+  border-radius: 22px;
+  display: block;
+  box-shadow: 0 14px 34px -12px rgba(34, 197, 94, 0.55);
+}
+
+.acceso__titulo {
+  margin: 18px 0 2px;
+  font-size: 27px;
+  letter-spacing: -0.6px;
+}
+
+.acceso__lema {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 2.4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.acceso__texto {
+  margin: 0 0 22px;
+  text-align: center;
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: var(--txt-2);
+}
+
+.acceso__nota {
+  margin: 20px 4px 0;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #6b7a94;
+}
+
+/* Botón de Google: blanco, alto, con el logo oficial */
+.google {
+  width: 100%;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  color: #1f1f1f;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 10px 26px -14px rgba(0, 0, 0, 0.8);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.google:hover { background: #f6f8fc; }
+.google:active { transform: scale(0.985); }
+.google:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 3px; }
+
+.google:disabled {
+  cursor: default;
+  opacity: 0.72;
+  transform: none;
+}
+
+.google__logo { width: 21px; height: 21px; flex: 0 0 auto; display: block; }
+
+.google--cargando .google__logo { animation: girar 1s linear infinite; }
+
 /* ================= TAMAÑO DE TELÉFONO =================
    En la computadora la app NO se estira a lo ancho del monitor: se queda
    con el ancho de un teléfono (390px) centrada en la pantalla. Sin biseles

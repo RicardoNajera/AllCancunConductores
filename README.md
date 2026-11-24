@@ -6,13 +6,15 @@ aceptar/rechazar y ganancias del día y del mes.
 Es la **misma base de datos** que All Cancún (cliente) y All Cancún Comercios.
 Aquí solo cambia la cara: RLS decide qué filas ve cada conductor.
 
-## Cómo se registra un conductor
+## Cómo entra un conductor
 
-1. Abre la app → **No tengo cuenta · Registrarme**.
-2. Correo y contraseña.
-3. Confirma el correo si el proyecto lo exige (Authentication → Email).
-4. La central le otorga el permiso `conducir` en `public.permisos`.
-5. Al abrir la app ya ve sus viajes.
+**Solo con Google.** No hay formularios ni contraseñas que llenar: el
+conductor toca *Continuar con Google* y listo.
+
+1. Abre la app → **Continuar con Google**.
+2. Elige su cuenta de Google.
+3. La central le otorga el permiso `conducir` en `public.permisos`.
+4. Al abrir la app ya ve sus viajes.
 
 Mientras no tenga el permiso, la app le muestra *"permiso de conducir
 pendiente"* y no lo deja entrar a los viajes. La app nunca se autoasigna
@@ -38,6 +40,7 @@ node dev-server.mjs   # http://127.0.0.1:8767
 
 ## Configuración en Supabase
 
-- **Authentication → Providers**: activa *Email*.
+- **Authentication → Providers → Google**: activo, con Client ID y Secret
+  de Google Cloud Console.
 - **Authentication → URL Configuration → Redirect URLs**: agrega el origen
-  donde publiques, para que el enlace de confirmación vuelva a la app.
+  donde publiques, para que Google regrese a la app.
