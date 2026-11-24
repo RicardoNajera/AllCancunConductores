@@ -1,29 +1,48 @@
 /**
  * All Cancún Conductores
  *
- * Panel del conductor: entra con su teléfono, ve los viajes que le tocan,
- * acepta o rechaza y marca inicio/fin. Pide todo al mismo Supabase que el
- * resto de All Cancún; aquí no hay backend propio.
+ * Panel del conductor. Cuenta real con Supabase Auth (correo+contraseña o
+ * Google), perfil en public.perfiles y permiso de conducir en public.permisos.
+ * Los viajes son los que tiene asignados su perfil.
  *
  * Sin framework ni build: HTML + módulos nativos, como las otras dos PWA.
  */
 
 import {
-  buscarConductor,
+  getSupabase,
+  sesionActual,
+  registrarConCorreo,
+  entrarConCorreo,
+  entrarConGoogle,
+  salir,
+  alCambiarSesion,
+  leerPerfil,
+  tienePermisoConducir,
   viajesDeConductor,
   actualizarEstado,
   soloDigitos,
 } from "./supabase.js";
 
-const LLAVE_SESION = "all-cancun-conductor";
-
 const $ = (sel, raiz = document) => raiz.querySelector(sel);
 
 const memoria = {
-  conductor: null,
+  sesion: null,
+  perfil: null,
+  permiteConducir: false,
   viajes: [],
   pestaña: "viajes",
   cargando: false,
+  error: "",
+};
+
+const ACTIVOS = ["asignado", "aceptado", "en_curso"];
+
+const ETIQUETAS = {
+  asignado: "Nuevo",
+  aceptado: "Aceptado",
+  en_curso: "En curso",
+  completado: "Completado",
+  cancelado: "Cancelado",
 };
 
 const centavosATexto = (centavos) =>
@@ -36,68 +55,109 @@ const escapar = (s) =>
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[c]);
 
-/* ---------------- Sesión ---------------- */
+const primerNombre = (p) =>
+  (p?.nombre_completo || p?.apodo || "conductor").split(" ")[0];
 
-function leerSesion() {
-  try {
-    const crudo = localStorage.getItem(LLAVE_SESION);
-    if (!crudo) return null;
-    const datos = JSON.parse(crudo);
-    return datos?.id ? datos : null;
-  } catch {
-    return null;
-  }
-}
+/* ---------------- Vistas de cuenta ---------------- */
 
-function guardarSesion(conductor) {
-  localStorage.setItem(LLAVE_SESION, JSON.stringify(conductor));
-  memoria.conductor = conductor;
-}
+function vistaEntrada(modo = "entrar", aviso = "") {
+  const esRegistro = modo === "registrar";
 
-function cerrarSesion() {
-  localStorage.removeItem(LLAVE_SESION);
-  memoria.conductor = null;
-  memoria.viajes = [];
-  pintar();
-}
-
-/* ---------------- Filtros ---------------- */
-
-const ACTIVOS = ["asignado", "aceptado", "en_curso"];
-
-const ETIQUETAS = {
-  asignado: "Nuevo",
-  aceptado: "Aceptado",
-  en_curso: "En curso",
-  completado: "Completado",
-  cancelado: "Cancelado",
-};
-
-const ORDEN = ["asignado", "aceptado", "en_curso", "completado", "cancelado"];
-
-/* ---------------- Vistas ---------------- */
-
-function vistaEntrada(error = "") {
   return `
-    <h1>Entrar</h1>
-    <p class="sutil">Escribe el teléfono con el que te registró All Cancún. Te mandamos a tus viajes, sin contraseña.</p>
-    ${error ? `<div class="aviso">${escapar(error)}</div>` : ""}
+    <h1>${esRegistro ? "Crear cuenta" : "Entrar"}</h1>
+    <p class="sutil">${
+      esRegistro
+        ? "Regístrate para recibir viajes. Usa el mismo correo con el que te darán de alta en la central."
+        : "Entra con tu cuenta de All Cancún."
+    }</p>
+
+    ${aviso ? `<div class="aviso">${escapar(aviso)}</div>` : ""}
+
     <div class="card">
-      <label for="tel">Teléfono</label>
-      <input id="tel" type="tel" inputmode="numeric" autocomplete="tel"
-             placeholder="10 dígitos" maxlength="15" value="">
-      <button class="btn" id="btn-entrar" type="button">Ver mis viajes</button>
+      <label for="correo">Correo</label>
+      <input id="correo" type="email" inputmode="email" autocomplete="email"
+             placeholder="tucorreo@ejemplo.com" value="">
+
+      <label for="contrasena">Contraseña</label>
+      <input id="contrasena" type="password" autocomplete="${esRegistro ? "new-password" : "current-password"}"
+             placeholder="Mínimo 6 caracteres">
+
+      <button class="btn" id="btn-principal" type="button">
+        ${esRegistro ? "Crear mi cuenta" : "Entrar"}
+      </button>
+
+      <button class="btn btn--ghost" id="btn-google" type="button">
+        ${esRegistro ? "Registrarme con Google" : "Entrar con Google"}
+      </button>
     </div>
-    <p class="sutil">Si tu número no aparece, pide a la central que te den de alta como conductor.</p>
+
+    <button class="btn btn--ghost" id="btn-cambiar-modo" type="button" data-modo="${esRegistro ? "entrar" : "registrar"}">
+      ${esRegistro ? "Ya tengo cuenta · Entrar" : "No tengo cuenta · Registrarme"}
+    </button>
+  `;
+}
+
+function vistaSinPermiso() {
+  const p = memoria.perfil || {};
+  return `
+    <h1>Hola, ${escapar(primerNombre(p))}</h1>
+    <div class="aviso">
+      Tu cuenta existe, pero todavía <strong>no tiene el permiso de conducir</strong>.
+      Pide a la central que te lo activen y vuelve a abrir la app.
+    </div>
+    <div class="card">
+      <div class="fila"><span>Cuenta</span><strong>${escapar(p.nombre_completo || p.apodo || "—")}</strong></div>
+      <div class="fila"><span>Permiso</span><strong>Conducir: pendiente</strong></div>
+    </div>
+    <button class="btn btn--ghost" id="btn-cerrar" type="button">Cerrar sesión</button>
+  `;
+}
+
+function vistaEsperandoCorreo(correo) {
+  return `
+    <h1>Revisa tu correo</h1>
+    <div class="aviso">
+      Te mandamos un enlace a <strong>${escapar(correo)}</strong> para confirmar la cuenta.
+      Después de confirmarla, entra aquí otra vez.
+    </div>
+    <button class="btn" id="btn-cambiar-modo" type="button" data-modo="entrar">Ya confirmé · Entrar</button>
+  `;
+}
+
+function vistaViajes() {
+  if (memoria.cargando) return `<h1>Mis viajes</h1><div class="cargando">Cargando</div>`;
+
+  const activos = memoria.viajes.filter((v) => ACTIVOS.includes(v.estado));
+  const historial = memoria.viajes.filter((v) => !ACTIVOS.includes(v.estado));
+
+  const bloqueActivo = activos.length
+    ? activos.map(tarjetaViaje).join("")
+    : `<div class="card vacio"><span class="vacio__icono">🛣️</span>
+         <div>No tienes viajes pendientes.</div>
+         <div class="sutil" style="margin-top:6px">Te avisamos aquí cuando te asignen uno.</div>
+       </div>`;
+
+  const bloqueHistorial = historial.length
+    ? `<h2>Historial</h2>${historial.slice(0, 10).map(tarjetaViaje).join("")}`
+    : "";
+
+  return `
+    <h1>Hola, ${escapar(primerNombre(memoria.perfil))}</h1>
+    ${bloqueActivo}
+    ${bloqueHistorial}
   `;
 }
 
 function tarjetaViaje(v) {
   const estado = String(v.estado || "");
   const etiqueta = ETIQUETAS[estado] || estado || "—";
-  const precio = centavosATexto(v.precio_centavos);
   const distancia = v.distancia_km ? `${Number(v.distancia_km).toFixed(1)} km` : "";
   const cuando = v.programado_para || v.creado_en;
+  const fecha = cuando
+    ? new Date(cuando).toLocaleString("es-MX", {
+        day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+      })
+    : "";
 
   let acciones = "";
   if (estado === "asignado") {
@@ -137,101 +197,88 @@ function tarjetaViaje(v) {
         </div>
       </div>
       <div class="viaje__meta">
-        <span class="viaje__precio">${precio}</span>
+        <span class="viaje__precio">${centavosATexto(v.precio_centavos)}</span>
         ${distancia ? `<span>· ${distancia}</span>` : ""}
-        ${cuando ? `<span>· ${escapar(new Date(cuando).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }))}</span>` : ""}
+        ${fecha ? `<span>· ${escapar(fecha)}</span>` : ""}
       </div>
       ${acciones}
     </article>`;
 }
 
-function vistaViajes() {
-  if (memoria.cargando) return `<h1>Mis viajes</h1><div class="cargando">Cargando</div>`;
-
-  const activos = memoria.viajes.filter((v) => ACTIVOS.includes(v.estado));
-  const historial = memoria.viajes.filter((v) => !ACTIVOS.includes(v.estado));
-
-  const bloqueActivo = activos.length
-    ? activos.map(tarjetaViaje).join("")
-    : `<div class="card vacio"><span class="vacio__icono">🛣️</span>
-         <div>No tienes viajes pendientes.</div>
-         <div class="sutil" style="margin-top:6px">Te avisamos aquí cuando te asignen uno.</div>
-       </div>`;
-
-  const bloqueHistorial = historial.length
-    ? `<h2>Historial</h2>${historial.slice(0, 10).map(tarjetaViaje).join("")}`
-    : "";
-
-  return `
-    <h1>Hola, ${escapar(memoria.conductor?.nombre?.split(" ")[0] || "conductor")}</h1>
-    ${bloqueActivo}
-    ${bloqueHistorial}
-  `;
-}
-
 function vistaGanancias() {
   const hechos = memoria.viajes.filter((v) => v.estado === "completado");
   const hoy = new Date().toDateString();
+  const ahora = new Date();
 
   const deHoy = hechos.filter((v) => new Date(v.creado_en).toDateString() === hoy);
-  const totalHoy = deHoy.reduce((s, v) => s + (Number(v.precio_centavos) || 0), 0);
-  const totalMes = hechos
-    .filter((v) => {
-      const f = new Date(v.creado_en);
-      const ahora = new Date();
-      return f.getMonth() === ahora.getMonth() && f.getFullYear() === ahora.getFullYear();
-    })
-    .reduce((s, v) => s + (Number(v.precio_centavos) || 0), 0);
+  const delMes = hechos.filter((v) => {
+    const f = new Date(v.creado_en);
+    return f.getMonth() === ahora.getMonth() && f.getFullYear() === ahora.getFullYear();
+  });
+
+  const suma = (lista) => lista.reduce((s, v) => s + (Number(v.precio_centavos) || 0), 0);
 
   return `
     <h1>Ganancias</h1>
     <div class="card">
       <div class="fila"><span>Viajes hoy</span><strong>${deHoy.length}</strong></div>
-      <div class="fila"><span>Hoy</span><strong>${centavosATexto(totalHoy)}</strong></div>
-      <div class="fila"><span>Este mes</span><strong>${centavosATexto(totalMes)}</strong></div>
-      <div class="fila"><span>Viajes completados</span><strong>${hechos.length}</strong></div>
+      <div class="fila"><span>Hoy</span><strong>${centavosATexto(suma(deHoy))}</strong></div>
+      <div class="fila"><span>Este mes</span><strong>${centavosATexto(suma(delMes))}</strong></div>
+      <div class="fila"><span>Completados</span><strong>${hechos.length}</strong></div>
     </div>
-    <p class="sutil">Cuenta solo los viajes marcados como completados desde esta app.</p>
+    <p class="sutil">Solo cuentan los viajes marcados como completados.</p>
   `;
 }
 
 function vistaPerfil() {
-  const c = memoria.conductor || {};
+  const p = memoria.perfil || {};
   return `
     <h1>Mi perfil</h1>
     <div class="card">
-      <div class="fila"><span>Nombre</span><strong>${escapar(c.nombre || "—")}</strong></div>
-      <div class="fila"><span>Teléfono</span><strong>${escapar(c.telefono || "—")}</strong></div>
-      <div class="fila"><span>Estado</span><strong>${c.activo === false ? "Inactivo" : "Activo"}</strong></div>
+      <div class="fila"><span>Nombre</span><strong>${escapar(p.nombre_completo || "—")}</strong></div>
+      <div class="fila"><span>Apodo</span><strong>${escapar(p.apodo || "—")}</strong></div>
+      <div class="fila"><span>Correo</span><strong>${escapar(memoria.sesion?.user?.email || "—")}</strong></div>
+      <div class="fila"><span>Permiso conducir</span><strong>${memoria.permiteConducir ? "Activo" : "Pendiente"}</strong></div>
     </div>
     <button class="btn btn--ghost" id="btn-cerrar" type="button">Cerrar sesión</button>
     <p class="sutil" style="margin-top:16px">All Cancún Conductores · versión 1.0</p>
   `;
 }
 
-/* ---------------- Pintado y eventos ---------------- */
+/* ---------------- Pintado ---------------- */
 
-let errorVisible = "";
+let modoEntrada = "entrar";
+let avisoEntrada = "";
+let correoPendiente = "";
 
 function pintar() {
   const vista = $("#vista");
   const dock = $("#dock");
-  const salir = $("#btn-salir");
-  const haySesion = Boolean(memoria.conductor);
+  const btnSalir = $("#btn-salir");
+  const pill = $("#estado-conexion");
 
-  dock.hidden = !haySesion;
-  salir.hidden = !haySesion;
+  const dentro = Boolean(memoria.sesion) && memoria.permiteConducir;
+  dock.hidden = !dentro;
+  btnSalir.hidden = !memoria.sesion;
 
-  if (!haySesion) {
-    vista.innerHTML = vistaEntrada(errorVisible);
-    $("#btn-entrar")?.addEventListener("click", entrar);
-    $("#tel")?.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") entrar();
-    });
+  if (pill) {
+    pill.textContent = memoria.sesion ? "Conectado" : "Sin sesión";
+    pill.classList.toggle("pill--on", Boolean(memoria.sesion));
+  }
+
+  if (!memoria.sesion) {
+    vista.innerHTML = correoPendiente
+      ? vistaEsperandoCorreo(correoPendiente)
+      : vistaEntrada(modoEntrada, avisoEntrada);
+    conectarEventosCuenta();
     return;
   }
 
-  errorVisible = "";
+  if (!memoria.permiteConducir) {
+    vista.innerHTML = vistaSinPermiso();
+    $("#btn-cerrar")?.addEventListener("click", cerrarSesion);
+    return;
+  }
 
   if (memoria.pestaña === "ganancias") vista.innerHTML = vistaGanancias();
   else if (memoria.pestaña === "perfil") vista.innerHTML = vistaPerfil();
@@ -244,57 +291,154 @@ function pintar() {
   });
 }
 
-async function entrar() {
-  const campo = $("#tel");
-  const boton = $("#btn-entrar");
-  const tel = soloDigitos(campo?.value);
+function conectarEventosCuenta() {
+  $("#btn-principal")?.addEventListener("click", enviarCuenta);
+  $("#btn-google")?.addEventListener("click", () => intentar(entrarConGoogle, "No se pudo abrir Google."));
+  $("#btn-cambiar-modo")?.addEventListener("click", (e) => {
+    modoEntrada = e.currentTarget.dataset.modo || "entrar";
+    avisoEntrada = "";
+    correoPendiente = "";
+    pintar();
+  });
 
-  if (tel.length < 10) {
-    errorVisible = "Escribe tu teléfono completo (10 dígitos).";
+  $("#contrasena")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") enviarCuenta();
+  });
+}
+
+/* ---------------- Acciones de cuenta ---------------- */
+
+function intentar(fn, mensaje) {
+  Promise.resolve()
+    .then(fn)
+    .catch((err) => {
+      avisoEntrada = mensajePorError(err, mensaje);
+      pintar();
+    });
+}
+
+/** Traduce los errores más comunes de Supabase Auth a algo entendible. */
+function mensajePorError(err, porDefecto = "") {
+  const m = String(err?.message || err || "").toLowerCase();
+  if (m.includes("invalid login")) return "Correo o contraseña incorrectos.";
+  if (m.includes("already registered") || m.includes("already been registered"))
+    return "Ese correo ya tiene cuenta. Entra con tu contraseña.";
+  if (m.includes("password should be at least"))
+    return "La contraseña necesita al menos 6 caracteres.";
+  if (m.includes("email not confirmed"))
+    return "Falta confirmar tu correo. Revisa tu bandeja de entrada.";
+  if (m.includes("unable to validate email")) return "Escribe un correo válido.";
+  if (m.includes("provider is not enabled"))
+    return "Google todavía no está activo en Supabase (Authentication → Providers).";
+  if (m.includes("failed to fetch") || m.includes("network"))
+    return "Sin conexión. Revisa tu internet.";
+  return porDefecto || err?.message || "Algo salió mal. Intenta de nuevo.";
+}
+
+async function enviarCuenta() {
+  const correo = $("#correo")?.value?.trim() || "";
+  const contrasena = $("#contrasena")?.value || "";
+  const boton = $("#btn-principal");
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
+    avisoEntrada = "Escribe un correo válido.";
+    pintar();
+    return;
+  }
+  if (contrasena.length < 6) {
+    avisoEntrada = "La contraseña necesita al menos 6 caracteres.";
     pintar();
     return;
   }
 
   boton.disabled = true;
-  boton.textContent = "Buscando…";
+  boton.textContent = modoEntrada === "registrar" ? "Creando cuenta…" : "Entrando…";
 
   try {
-    const conductor = await buscarConductor(tel);
-    if (!conductor) {
-      errorVisible = "Ese número no está registrado como conductor.";
-      pintar();
-      return;
+    if (modoEntrada === "registrar") {
+      const res = await registrarConCorreo(correo, contrasena);
+      if (res.pendienteConfirmar) {
+        correoPendiente = correo;
+        pintar();
+        return;
+      }
+      await arrancarSesion();
+    } else {
+      await entrarConCorreo(correo, contrasena);
+      await arrancarSesion();
     }
-    if (conductor.activo === false) {
-      errorVisible = "Tu cuenta está inactiva. Habla con la central.";
-      pintar();
-      return;
-    }
-    guardarSesion(conductor);
-    await cargarViajes();
   } catch (err) {
-    errorVisible = `No pudimos entrar: ${err.message}`;
+    avisoEntrada = mensajePorError(err);
     pintar();
   }
 }
 
+/* ---------------- Sesión y datos ---------------- */
+
+async function arrancarSesion() {
+  memoria.error = "";
+  const sesion = await sesionActual();
+
+  if (!sesion) {
+    memoria.sesion = null;
+    pintar();
+    return;
+  }
+
+  memoria.sesion = sesion;
+
+  try {
+    memoria.perfil = await leerPerfil(sesion.user.id);
+    memoria.permiteConducir = memoria.perfil ? await tienePermisoConducir(memoria.perfil.id) : false;
+  } catch (err) {
+    memoria.permiteConducir = false;
+    memoria.error = err.message;
+  }
+
+  pintar();
+
+  if (memoria.permiteConducir) await cargarViajes();
+  else if (memoria.perfil) {
+    /* Sin permiso todavía: se reintenta al volver a la app, por si la
+       central ya lo activó mientras estaba abierta. */
+    setTimeout(() => {
+      if (memoria.sesion && !memoria.permiteConducir) arrancarSesion().catch(() => {});
+    }, 60000);
+  }
+}
+
 async function cargarViajes() {
-  if (!memoria.conductor) return;
+  if (!memoria.perfil || !memoria.permiteConducir) return;
   memoria.cargando = true;
   pintar();
 
   try {
-    memoria.viajes = await viajesDeConductor(memoria.conductor.id);
-    marcarConexion(true);
+    memoria.viajes = await viajesDeConductor(memoria.perfil.id);
   } catch (err) {
-    marcarConexion(false);
-    errorVisible = "";
     console.error(err);
   } finally {
     memoria.cargando = false;
     pintar();
   }
 }
+
+async function cerrarSesion() {
+  try {
+    await salir();
+  } catch {
+    /* Si falla la red, la sesión local igual se borra abajo. */
+  }
+  memoria.sesion = null;
+  memoria.perfil = null;
+  memoria.permiteConducir = false;
+  memoria.viajes = [];
+  modoEntrada = "entrar";
+  avisoEntrada = "";
+  correoPendiente = "";
+  pintar();
+}
+
+/* ---------------- Acciones de viaje ---------------- */
 
 const SIGUIENTE = {
   aceptar: "aceptado",
@@ -318,32 +462,24 @@ async function accionar(evento) {
   const nuevoEstado = SIGUIENTE[accion];
   if (!nuevoEstado || !id) return;
 
-  // Doble toque accidental: se bloquea el grupo mientras se guarda.
+  /* Doble toque accidental: se bloquea el grupo mientras se guarda. */
   const grupo = boton.closest(".acciones") || boton;
   grupo.querySelectorAll("button").forEach((b) => (b.disabled = true));
   boton.textContent = "Guardando…";
 
   try {
-    await actualizarEstado(id, memoria.conductor.id, nuevoEstado);
+    await actualizarEstado(id, memoria.perfil.id, nuevoEstado);
     await cargarViajes();
     if (nuevoEstado === "completado" && navigator.vibrate) navigator.vibrate(60);
   } catch (err) {
-    alert(err.message);
-    grupo.querySelectorAll("button").forEach((b) => (b.disabled = false));
+    alert(mensajePorError(err, "No se pudo actualizar el viaje."));
     pintar();
   }
 }
 
-function marcarConexion(activa) {
-  const pill = $("#estado-conexion");
-  if (!pill) return;
-  pill.textContent = activa ? "Conectado" : "Sin conexión";
-  pill.classList.toggle("pill--on", activa);
-}
-
 /* ---------------- Arranque ---------------- */
 
-function iniciar() {
+async function iniciar() {
   $("#dock")?.addEventListener("click", (e) => {
     const boton = e.target.closest("[data-tab]");
     if (!boton) return;
@@ -359,20 +495,26 @@ function iniciar() {
     if (confirm("¿Cerrar sesión en este teléfono?")) cerrarSesion();
   });
 
-  window.addEventListener("online", () => marcarConexion(true));
-  window.addEventListener("offline", () => marcarConexion(false));
+  window.addEventListener("online", () => pintar());
+  window.addEventListener("offline", () => pintar());
 
-  const guardada = leerSesion();
-  if (guardada) {
-    memoria.conductor = guardada;
-    cargarViajes();
-  } else {
+  try {
+    await getSupabase();
+
+    /* Google vuelve a esta página con la sesión ya puesta (PKCE). */
+    alCambiarSesion(() => {
+      if (memoria.sesion === null) arrancarSesion().catch(() => {});
+    });
+
+    await arrancarSesion();
+  } catch (err) {
+    avisoEntrada = mensajePorError(err, "No pudimos conectar con Supabase.");
     pintar();
   }
 
-  // Refresco silencioso mientras la pestaña está visible.
+  /* Refresco silencioso mientras la pestaña está visible. */
   setInterval(() => {
-    if (memoria.conductor && document.visibilityState === "visible") cargarViajes();
+    if (memoria.permiteConducir && document.visibilityState === "visible") cargarViajes();
   }, 30000);
 
   if ("serviceWorker" in navigator && location.hostname !== "127.0.0.1" && location.hostname !== "localhost") {

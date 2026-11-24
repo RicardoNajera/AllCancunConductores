@@ -1,96 +1,201 @@
 /**
- * Cliente mínimo de Supabase por REST (sin dependencias, sin build).
+ * Acceso a Supabase con el SDK oficial (el mismo que usan la PWA del cliente
+ * y el panel de comercios).
  *
- * Reutiliza la misma base que la PWA del cliente y el panel de comercios:
- * mismas credenciales públicas, mismo RLS. Aquí solo se hace lo que un
- * conductor necesita: entrar con su teléfono, ver sus viajes y actualizar
- * estado. Nada de escrituras "administrativas".
+ * Aquí sí hay cuentas reales: el conductor se registra con correo+contraseña
+ * o con Google, y su perfil vive en public.perfiles. El permiso de conducir
+ * se otorga con la tabla de permisos (`tipo_permiso = 'conducir'`), no
+ * escribiendo el rol: la app nunca asigna roles.
  */
 
-const URL_BASE = window.ALL_CANCUN_SUPABASE_URL;
-const LLAVE = window.ALL_CANCUN_SUPABASE_ANON_KEY;
+const SDK_URL =
+  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js";
 
-if (!URL_BASE || !LLAVE) {
-  throw new Error("Falta config.js: revisa ALL_CANCUN_SUPABASE_URL y ALL_CANCUN_SUPABASE_ANON_KEY.");
+let cliente = null;
+let cargando = null;
+
+export function config() {
+  const url = window.ALL_CANCUN_SUPABASE_URL;
+  const clave = window.ALL_CANCUN_SUPABASE_ANON_KEY;
+  if (!url || !clave) throw new Error("Falta config.js: revisa las credenciales de Supabase.");
+  return { url, clave };
 }
 
-const cabeceras = (extra = {}) => ({
-  apikey: LLAVE,
-  Authorization: `Bearer ${LLAVE}`,
-  "Content-Type": "application/json",
-  ...extra,
-});
+function cargarSdk() {
+  return new Promise((resolver, rechazar) => {
+    if (window.supabase?.createClient) return resolver();
 
-async function pedir(ruta, opciones = {}) {
-  const res = await fetch(`${URL_BASE}/rest/v1/${ruta}`, {
-    ...opciones,
-    headers: cabeceras(opciones.headers),
+    const previo = document.querySelector(`script[src="${SDK_URL}"]`);
+    if (previo) {
+      previo.addEventListener("load", () => resolver());
+      previo.addEventListener("error", () => rechazar(new Error("No se pudo cargar supabase-js")));
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = SDK_URL;
+    script.async = true;
+    script.onload = () => resolver();
+    script.onerror = () => rechazar(new Error("No se pudo cargar supabase-js"));
+    document.head.appendChild(script);
   });
-
-  if (!res.ok) {
-    const detalle = await res.text().catch(() => "");
-    throw new Error(`Supabase ${res.status}: ${detalle.slice(0, 180)}`);
-  }
-
-  const texto = await res.text();
-  return texto ? JSON.parse(texto) : null;
 }
 
-/* Columnas que esta app realmente usa. Evita traer el objeto entero. */
+/** Cliente singleton. Lanza si faltan credenciales o no hay red para el SDK. */
+export async function getSupabase() {
+  if (cliente) return cliente;
+
+  cargando =
+    cargando ||
+    (async () => {
+      await cargarSdk();
+      const { url, clave } = config();
+      cliente = window.supabase.createClient(url, clave, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          flowType: "pkce",
+        },
+      });
+      return cliente;
+    })();
+
+  try {
+    return await cargando;
+  } catch (err) {
+    cargando = null;
+    throw err;
+  }
+}
+
+/* ---------------- Cuenta ---------------- */
+
+export async function sesionActual() {
+  const sb = await getSupabase();
+  const { data } = await sb.auth.getSession();
+  return data.session || null;
+}
+
+export async function registrarConCorreo(correo, contrasena) {
+  const sb = await getSupabase();
+  const { data, error } = await sb.auth.signUp({
+    email: correo.trim().toLowerCase(),
+    password: contrasena,
+  });
+  if (error) throw error;
+
+  /* Si el proyecto exige confirmar el correo no hay sesión todavía:
+     se avisa para que el conductor revise su bandeja. */
+  if (!data.session) return { pendienteConfirmar: true, usuario: data.user };
+  return { pendienteConfirmar: false, usuario: data.user };
+}
+
+export async function entrarConCorreo(correo, contrasena) {
+  const sb = await getSupabase();
+  const { data, error } = await sb.auth.signInWithPassword({
+    email: correo.trim().toLowerCase(),
+    password: contrasena,
+  });
+  if (error) throw error;
+  return data.session;
+}
+
+export async function entrarConGoogle() {
+  const sb = await getSupabase();
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      /* Vuelve a esta misma página. Debe estar en
+         Authentication → URL Configuration → Redirect URLs. */
+      redirectTo: window.location.origin + window.location.pathname,
+      queryParams: { prompt: "select_account" },
+    },
+  });
+  if (error) throw error;
+}
+
+export async function salir() {
+  const sb = await getSupabase();
+  await sb.auth.signOut();
+}
+
+/** Avisa cada cambio de sesión. Devuelve la función para dejar de escuchar. */
+export async function alCambiarSesion(callback) {
+  const sb = await getSupabase();
+  const { data } = sb.auth.onAuthStateChange((evento, sesion) => callback(sesion || null, evento));
+  return () => data.subscription.unsubscribe();
+}
+
+/* ---------------- Perfil y permiso ---------------- */
+
+const CAMPOS_PERFIL = "id,rol,apodo,nombre_completo,foto_perfil_url,telefono";
+
+/** Perfil del usuario. RLS limita la fila a id = auth.uid(). */
+export async function leerPerfil(usuarioId) {
+  const sb = await getSupabase();
+  const { data, error } = await sb
+    .from("perfiles")
+    .select(CAMPOS_PERFIL)
+    .eq("id", usuarioId)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+/**
+ * true si la cuenta tiene el permiso 'conducir'.
+ * Se consulta la tabla de permisos, no se escribe el rol: el rol lo asigna
+ * solo el sistema (trigger) y la app nunca lo toca.
+ */
+export async function tienePermisoConducir(perfilId) {
+  const sb = await getSupabase();
+  const { data, error } = await sb
+    .from("permisos")
+    .select("tipo")
+    .eq("perfil_id", perfilId)
+    .eq("tipo", "conducir")
+    .maybeSingle();
+  if (error) return false;
+  return Boolean(data);
+}
+
+/* ---------------- Viajes ---------------- */
+
 const CAMPOS_VIAJE =
   "id,folio,estado,origen,destino,precio_centavos,distancia_km,creado_en," +
   "programado_para,cliente_nombre,cliente_telefono,conductor_id";
 
-/* Normaliza el teléfono a solo dígitos para comparar como en Postgres. */
-export const soloDigitos = (v) => String(v || "").replace(/\D/g, "");
-
-/**
- * Busca el conductor por teléfono. Devuelve null si no existe.
- * Se espera una tabla `conductores` con RLS de solo-lectura pública.
- */
-export async function buscarConductor(telefono) {
-  const tel = soloDigitos(telefono);
-  if (tel.length < 10) throw new Error("El teléfono debe tener al menos 10 dígitos.");
-
-  const filas = await pedir(
-    `conductores?telefono=eq.${encodeURIComponent(tel)}&select=id,nombre,telefono,activo,mototaxi_id&limit=1`
-  );
-
-  return filas?.[0] || null;
+/** Viajes asignados al perfil. Los más recientes primero. */
+export async function viajesDeConductor(conductorId) {
+  const sb = await getSupabase();
+  const { data, error } = await sb
+    .from("viajes")
+    .select(CAMPOS_VIAJE)
+    .eq("conductor_id", conductorId)
+    .order("creado_en", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return data || [];
 }
 
 /**
- * Viajes del conductor. Los más recientes primero.
- * @param {string} conductorId
- * @param {{ estados?: string[] }} [filtro]
+ * Cambia el estado de un viaje propio. El filtro por conductor_id es la red:
+ * aunque alguien manipule el navegador, solo puede tocar sus viajes.
  */
-export async function viajesDeConductor(conductorId, filtro = {}) {
-  const estados = filtro.estados?.length
-    ? `&estado=in.(${filtro.estados.join(",")})`
-    : "";
-
-  return (
-    (await pedir(
-      `viajes?conductor_id=eq.${encodeURIComponent(conductorId)}` +
-        `&select=${CAMPOS_VIAJE}${estados}&order=creado_en.desc&limit=50`
-    )) || []
-  );
-}
-
-/** Cambia el estado de un viaje propio. El filtro por conductor_id es la red. */
 export async function actualizarEstado(viajeId, conductorId, estado) {
-  const filas = await pedir(
-    `viajes?id=eq.${encodeURIComponent(viajeId)}` +
-      `&conductor_id=eq.${encodeURIComponent(conductorId)}`,
-    {
-      method: "PATCH",
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify({ estado }),
-    }
-  );
+  const sb = await getSupabase();
+  const { data, error } = await sb
+    .from("viajes")
+    .update({ estado })
+    .eq("id", viajeId)
+    .eq("conductor_id", conductorId)
+    .select(CAMPOS_VIAJE)
+    .maybeSingle();
 
-  if (!filas?.length) {
-    throw new Error("No se pudo actualizar el viaje: no es tuyo o ya cambió de estado.");
-  }
-  return filas[0];
+  if (error) throw error;
+  if (!data) throw new Error("No se pudo actualizar: el viaje no es tuyo o ya cambió de estado.");
+  return data;
 }
+
+export const soloDigitos = (v) => String(v || "").replace(/\D/g, "");
