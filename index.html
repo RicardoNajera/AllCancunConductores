@@ -13,12 +13,11 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="stylesheet" href="styles/app.css" />
   <script>
-    /* En computadora la app se muestra dentro de un teléfono 1:1 (390×844,
-       el tamaño de un iPhone moderno). No se estira a lo ancho del monitor:
-       el conductor la usa en la mano y así lo que ve el diseñador es
-       exactamente lo que verá el conductor. */
+    /* En la computadora la app conserva el tamaño de un teléfono (390px de
+       ancho): no se estira a lo ancho del monitor. En el celular no cambia
+       nada, porque la pantalla ya mide eso. Así se ve 1:1 en ambos lados. */
     if (window.matchMedia("(min-width: 821px)").matches) {
-      document.documentElement.classList.add("en-escritorio");
+      document.documentElement.classList.add("tamano-telefono");
     }
   </script>
 </head>
@@ -49,8 +48,6 @@
       </button>
     </nav>
   </div>
-
-  <p class="vista-prev" aria-hidden="true">All Cancún Conductores · vista previa de teléfono</p>
 
   <script src="config.js"></script>
   <script type="module" src="src/app.js"></script>

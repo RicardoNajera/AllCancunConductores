@@ -325,142 +325,65 @@ input:-webkit-autofill:focus {
   transition: background-color 9999s ease-out 0s;
 }
 
-/* ================= VISTA 1:1 EN COMPUTADORA =================
-   En un monitor la app no se estira: se encierra en un marco de teléfono
-   de 390×844 (iPhone moderno). La barra y el dock pasan de `fixed` a
-   `absolute` dentro del marco, así se quedan dentro del cristal.
-   Lo que se ve en la compu es idéntico a lo que se ve en la mano. */
+/* ================= TAMAÑO DE TELÉFONO =================
+   En la computadora la app NO se estira a lo ancho del monitor: se queda
+   con el ancho de un teléfono (390px) centrada en la pantalla. Sin biseles
+   ni adornos: es la misma app, al mismo tamaño que en la mano, para que lo
+   que se ve en la compu sea exactamente lo que ve el conductor.
 
-/* La etiqueta solo se ve en computadora (la pone index.html) */
-.vista-prev { display: none; }
-
-.en-escritorio {
-  --marco-ancho: 390px;
-  --marco-alto: 844px;
-  --marco-borde: 10px;
-  --marco-radio: 46px;
-}
-
-.en-escritorio body {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 24px 16px;
-  background:
-    radial-gradient(900px 600px at 50% 0%, #16203a 0%, #0b1220 60%, #070c16 100%);
-}
-
-/* Envoltura que no se transforma: el marco sí, y así `fixed` queda dentro. */
-.en-escritorio #app {
-  position: relative;
-  width: var(--marco-ancho);
-  height: calc(var(--marco-alto) + var(--marco-borde) * 2);
-  box-sizing: content-box;
-  padding: var(--marco-borde);
-  border-radius: var(--marco-radio);
-  background: #05080f;
-  box-shadow:
-    0 0 0 1px #26304a,
-    0 0 0 7px #11182a,
-    0 0 0 8px #2b3550,
-    0 44px 90px -20px rgba(0, 0, 0, 0.85),
-    0 0 120px -30px rgba(34, 197, 94, 0.18);
-}
-
-/* El "cristal" del teléfono: aquí vive todo lo que va posicionado fijo. */
-.en-escritorio #app::before {
-  content: "";
-  position: absolute;
-  inset: var(--marco-borde);
-  border-radius: calc(var(--marco-radio) - var(--marco-borde));
-  background: var(--bg);
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* Isla dinámica */
-.en-escritorio #app::after {
-  content: "";
-  position: absolute;
-  top: calc(var(--marco-borde) + 10px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: 104px;
-  height: 26px;
-  border-radius: 999px;
-  background: #000;
-  z-index: 60;
-}
-
-/* Contenido recortado dentro del cristal */
-.en-escritorio #app > * {
-  position: relative;
-  z-index: 1;
-}
+   La clase la pone index.html solo en pantallas anchas. En el celular no
+   se aplica nada de esto y la app usa todo el ancho, como debe ser. */
 
 @media (min-width: 821px) {
-  .en-escritorio #app {
+  .tamano-telefono {
+    --ancho-telefono: 390px;
+    background: #070c16;
+  }
+
+  /* Fondo del escritorio: un halo suave detrás de la columna de la app */
+  .tamano-telefono body {
+    min-height: 100vh;
+    background:
+      radial-gradient(760px 620px at 50% 0%, #131d33 0%, #0a1020 55%, #070c16 100%);
+  }
+
+  /* La app ocupa 390px de ancho y toda la altura de la pantalla */
+  .tamano-telefono #app {
+    width: var(--ancho-telefono);
+    min-height: 100vh;
+    margin: 0 auto;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    background: var(--bg);
+    box-shadow:
+      0 0 0 1px var(--line),
+      0 30px 80px -30px rgba(0, 0, 0, 0.9);
   }
 
-  .en-escritorio .topbar {
-    position: relative;
+  /* Barra y dock dejan de pegarse a la ventana: ahora van dentro de la
+     columna de 390px, así no se salen a los lados del escritorio. */
+  .tamano-telefono .topbar {
+    position: sticky;
+    top: 0;
     flex: 0 0 auto;
-    margin-top: 20px;
-    padding-left: 14px;
-    padding-right: 14px;
-    gap: 8px;
   }
 
-  .en-escritorio .topbar__brand {
-    white-space: nowrap;
-    font-size: 15px;
-  }
-
-  .en-escritorio .topbar__brand > span:last-child {
-    white-space: nowrap;
-  }
-
-  .en-escritorio .vista {
-    position: relative;
+  /* La barra y el dock son sticky, así que la vista ya no necesita
+     reservar el espacio de ambos: solo su propio margen. */
+  .tamano-telefono .vista {
     flex: 1 1 auto;
+    width: 100%;
     max-width: none;
-    overflow-y: auto;
-    padding-top: 14px;
-    padding-bottom: 20px;
-    scrollbar-width: none;
+    min-height: 0;
+    box-sizing: border-box;
+    padding: 20px 18px 24px;
   }
 
-  .en-escritorio .dock {
-    position: relative;
+  .tamano-telefono .dock {
+    position: sticky;
+    bottom: 0;
     flex: 0 0 auto;
     width: 100%;
-    border-radius: 0 0 24px 24px;
   }
 }
 
-.en-escritorio .vista::-webkit-scrollbar { display: none; }
-
-/* Etiqueta debajo del teléfono, al estilo de las vistas previas */
-.en-escritorio .vista-prev {
-  display: block;
-  font-size: 12px;
-  letter-spacing: 0.4px;
-  color: #5a6884;
-  white-space: nowrap;
-  text-align: center;
-}
-
-/* Monitores bajos: se reduce el marco para que quepa completo */
-@media (min-width: 821px) and (max-height: 940px) {
-  .en-escritorio {
-    --marco-alto: 760px;
-    --marco-ancho: 351px;
-  }
-}
