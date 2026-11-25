@@ -206,23 +206,53 @@ function vistaViajes() {
   `;
 }
 
-/* Estado de espera: el conductor está en línea, esperando que caiga un viaje.
-   Es la pantalla que más va a ver, así que se siente viva, no vacía. */
+/* Estado de espera: el conductor está en línea y esperando que caiga un viaje.
+   Es la pantalla que más va a ver, así que se siente viva, no vacía: mapa
+   tenue, pin latiendo y los datos del día abajo, como en Uber. */
 function tarjetaEspera() {
+  const ahora = new Date();
+  const hechos = memoria.viajes.filter(
+    (v) =>
+      v.estado === "completado" &&
+      v.creado_en &&
+      new Date(v.creado_en).toDateString() === ahora.toDateString()
+  );
+  const suma = hechos.reduce((t, v) => t + (Number(v.precio_centavos) || 0), 0);
+
   return `
-    <div class="radar">
-      <div class="radar__circulo" aria-hidden="true">
-        <span class="radar__onda"></span>
-        <span class="radar__onda"></span>
-        <span class="radar__onda"></span>
-        <span class="radar__nucleo">${ICONO_AUTO}</span>
+    <section class="espera">
+      <div class="espera__mapa">
+        <span class="espera__mancha" aria-hidden="true"></span>
+        <span class="espera__cinta">
+          <span class="espera__latido" aria-hidden="true"></span>
+          En línea
+        </span>
+        <span class="espera__pin" aria-hidden="true">${ICONO_AUTO}</span>
       </div>
-      <div class="radar__titulo">Buscando viajes</div>
-      <p class="radar__texto">
-        Estás en línea. La central te manda el viaje aquí mismo y te avisa
-        en cuanto lo tengas.
-      </p>
-    </div>
+
+      <div class="espera__cabecera">
+        <h1 class="espera__titulo">Esperando un viaje</h1>
+        <p class="espera__texto">
+          Estás conectado. En cuanto la central te asigne un cliente, la oferta
+          aparece aquí y suena la alerta.
+        </p>
+      </div>
+
+      <div class="espera__datos">
+        <div class="espera__dato">
+          <strong>${centavosATexto(suma)}</strong>
+          <span>Hoy</span>
+        </div>
+        <div class="espera__dato">
+          <strong>${hechos.length}</strong>
+          <span>${hechos.length === 1 ? "Viaje" : "Viajes"}</span>
+        </div>
+        <div class="espera__dato">
+          <strong>${escapar(saludo())}</strong>
+          <span>${escapar(primerNombre(memoria.perfil) || "Conductor")}</span>
+        </div>
+      </div>
+    </section>
   `;
 }
 
