@@ -688,6 +688,22 @@ function conectarRealtime() {
   }).then((cerrar) => {
     state.canalCierre = cerrar;
   });
+
+  /* Respaldo por si Realtime no está activado en la tabla. Sin esto,
+     si el proyecto no tiene replicación en public.viajes no llega ni
+     un solo evento y el viaje pedido en All Cancún nunca aparecería.
+     openTripAlert ya ignora la llamada si hay una alerta abierta o el
+     conductor está en otro paso, así que no se duplica nada. */
+  state.pollTimer = setInterval(async () => {
+    if (!state.driverOnline) return;
+    if (state.alertOpen || state.driverServiceStep !== 'idle') return;
+
+    const { viajes } = await listarSolicitados(1);
+    const fila = viajes?.[0];
+    if (!fila || fila.conductor_id) return;
+
+    openTripAlert(filaARequest(fila));
+  }, 4000);
 }
 
 /** Cierra canal, polling y GPS. */

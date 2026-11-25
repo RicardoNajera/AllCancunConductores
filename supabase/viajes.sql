@@ -58,6 +58,13 @@ create policy viajes_leer_propios on public.viajes
   for select to authenticated
   using (conductor_id = auth.uid() or cliente_id = auth.uid());
 
+-- ⚠️ OJO: esta política NO deja ver los viajes libres.
+-- Un viaje 'solicitado' tiene conductor_id = NULL, así que para el
+-- conductor la condición de arriba es falsa y la fila no le llega.
+-- Para que los pedidos de All Cancún APAREZCAN en la app del conductor
+-- hay que correr también supabase/05-FIX-conductor-ve-solicitados.sql.
+-- (Y 04-FIX-tomar-viaje.sql para que pueda aceptarlos.)
+
 -- Solo el conductor asignado cambia el estado, y solo a estados válidos
 -- para él. Rechazar equivale a cancelar. No puede reasignarse el viaje.
 drop policy if exists viajes_conductor_actualiza on public.viajes;
