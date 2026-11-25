@@ -24,13 +24,22 @@
 <body>
   <div id="app">
     <header class="topbar">
+      <button class="btn-avatar" id="btn-perfil" type="button" hidden aria-label="Mi cuenta">
+        <span id="avatar-inicial">C</span>
+      </button>
+
       <div class="topbar__brand">
-        <span class="topbar__dot" aria-hidden="true"></span>
+        <span class="topbar__dot" id="estado-punto" aria-hidden="true"></span>
         <span>All Cancún <strong>Conductores</strong></span>
       </div>
+
       <div class="topbar__actions">
-        <span id="estado-conexion" class="pill pill--off">Sin conectar</span>
-        <button id="btn-salir" class="btn-icon" type="button" hidden aria-label="Cerrar sesión">⎋</button>
+        <button class="btn-icon" id="btn-salir" type="button" hidden aria-label="Cerrar sesión">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <path d="M16 17l5-5-5-5" /><path d="M21 12H9" />
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -38,13 +47,31 @@
 
     <nav class="dock" id="dock" hidden>
       <button type="button" class="dock__item is-active" data-tab="viajes">
-        <span class="dock__icon" aria-hidden="true">🛣️</span><span>Viajes</span>
+        <span class="dock__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 17h2l2-6h10l2 6h2" /><circle cx="7.5" cy="18.5" r="1.6" /><circle cx="16.5" cy="18.5" r="1.6" />
+          </svg>
+        </span>
+        <span>Viajes</span>
+        <span class="dock__badge" id="dock-badge" hidden>0</span>
       </button>
+
       <button type="button" class="dock__item" data-tab="ganancias">
-        <span class="dock__icon" aria-hidden="true">💰</span><span>Ganancias</span>
+        <span class="dock__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 17l5-6 4 3 5-7 4 4" /><path d="M3 21h18" />
+          </svg>
+        </span>
+        <span>Ganancias</span>
       </button>
+
       <button type="button" class="dock__item" data-tab="perfil">
-        <span class="dock__icon" aria-hidden="true">👤</span><span>Perfil</span>
+        <span class="dock__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="3.6" /><path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+          </svg>
+        </span>
+        <span>Cuenta</span>
       </button>
     </nav>
   </div>

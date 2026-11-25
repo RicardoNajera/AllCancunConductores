@@ -6,7 +6,7 @@
  * el conductor no vea un viaje cancelado como si siguiera vivo.
  */
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v98";
 const CACHE = `conductores-${CACHE_VERSION}`;
 
 const CASCARON = [
