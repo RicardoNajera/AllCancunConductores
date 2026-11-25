@@ -6,7 +6,7 @@
  * el conductor no vea un viaje cancelado como si siguiera vivo.
  */
 
-const CACHE_VERSION = "v99";
+const CACHE_VERSION = "v100";
 const CACHE = `conductores-${CACHE_VERSION}`;
 
 const CASCARON = [
@@ -34,6 +34,10 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.tipo === "refrescar") self.skipWaiting();
+});
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
@@ -57,18 +61,17 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Estáticos: caché primero, red de respaldo.
+  // Estáticos: red primero (para que los cambios del código lleguen al
+  // instante) y caché solo como respaldo cuando no hay señal.
   event.respondWith(
-    caches.match(req).then(
-      (cacheado) =>
-        cacheado ||
-        fetch(req).then((res) => {
-          if (res.ok) {
-            const copia = res.clone();
-            caches.open(CACHE).then((c) => c.put(req, copia));
-          }
-          return res;
-        })
-    )
+    fetch(req)
+      .then((res) => {
+        if (res.ok) {
+          const copia = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copia));
+        }
+        return res;
+      })
+      .catch(() => caches.match(req))
   );
 });

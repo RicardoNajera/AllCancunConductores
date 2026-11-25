@@ -19,6 +19,58 @@
     if (window.matchMedia("(min-width: 821px)").matches) {
       document.documentElement.classList.add("tamano-telefono");
     }
+
+    /* Actualización garantizada: cada vez que se abre la app se compara la
+       versión instalada contra la del servidor. Si cambió, se borran la caché
+       y el service worker viejos y la página se recarga sola una vez. Así
+       ningún conductor se queda viendo una versión anterior. */
+    (function () {
+      var VERSION = "ac3-v100"; // <-- subir junto con CACHE_VERSION de sw.js
+      var LLAVE = "ac3-version";
+
+      // Sin service worker soportado: recarga normal si la versión cambió.
+      try {
+        if (localStorage.getItem(LLAVE) && localStorage.getItem(LLAVE) !== VERSION) {
+          localStorage.setItem(LLAVE, VERSION);
+          location.replace(location.pathname + "?v=" + VERSION);
+          return;
+        }
+        localStorage.setItem(LLAVE, VERSION);
+      } catch (e) {}
+
+      if (!("serviceWorker" in navigator)) return;
+
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (r) {
+          if (r.waiting) r.waiting.postMessage({ tipo: "refrescar" });
+        });
+      });
+
+      // Se pide el index con la red saltándose la caché. Si el que responde
+      // trae otra versión, se limpia todo y se recarga.
+      fetch("index.html?ver=" + Date.now(), { cache: "no-store" })
+        .then(function (r) { return r.text(); })
+        .then(function (html) {
+          var m = html.match(/ac3-v\d+/);
+          if (!m || m[0] === VERSION) return;
+          localStorage.setItem(LLAVE, m[0]);
+          return caches
+            .keys()
+            .then(function (ks) {
+              return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+            })
+            .then(function () {
+              return navigator.serviceWorker.getRegistrations();
+            })
+            .then(function (regs) {
+              return Promise.all(regs.map(function (r) { return r.unregister(); }));
+            })
+            .then(function () {
+              location.replace(location.pathname + "?v=" + m[0]);
+            });
+        })
+        .catch(function () {});
+    })();
   </script>
 </head>
 <body>
